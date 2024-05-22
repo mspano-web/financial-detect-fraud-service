@@ -45,4 +45,10 @@ ___
 * [financial-transaction-processor](https://github.com/mspano-web/financial-transaction-processor) 
 * [financial-movement-service](https://github.com/mspano-web/financial-movement-service) 
 * [financial-detect-fraud-service](https://github.com/mspano-web/financial-detect-fraud-service) (Actual/Current)
-* [Application design](https://drive.google.com/file/d/1m-AsA6Ke27wzLe1TpvlunpNZ1n9yILJ8/view?usp=drive_link)
+
+___
+
+## Documentacion de soporte / Support documentation
+
+* [Application Architecture Diagram](https://drive.google.com/file/d/1m-AsA6Ke27wzLe1TpvlunpNZ1n9yILJ8/view?) (Google Drive)
+
