@@ -7,8 +7,8 @@ import { Producer, Consumer } from 'kafkajs';
 import { Model } from 'mongoose';
 import { InjectModel } from '@nestjs/mongoose';
 import { Fraud } from './financial.schema';
-import { Observable, firstValueFrom, EMPTY } from 'rxjs';
-import { catchError } from 'rxjs/operators';
+import { Observable, EMPTY, lastValueFrom, EmptyError } from 'rxjs';
+import { catchError, defaultIfEmpty } from 'rxjs/operators';
 import { TransactionStatus } from '../types/results';
 import { KafkaTopics } from '../types/topics';
 
@@ -95,7 +95,7 @@ export class FinancialFraudService {
               KafkaTopics.FMS_COMPENSATION,
               transactionMessage,
             ).subscribe({
-              next: () => {
+              complete: () => {
                 console.log(
                   'Requested compensation OK - transaction id:',
                   transactionMessage.id,
@@ -115,21 +115,20 @@ export class FinancialFraudService {
             });
             const errorObj = {
               result: resultTmp,
-              transactionDto: transactionMessage,
+              transaction: transactionMessage,
               error: 'Failure to analyze fraud',
             };
             this.sendMessage(
               KafkaTopics.END_TRANSACTIONS_CREDIT_CARD,
               errorObj,
             ).subscribe({
-              next: () => {
+              complete: () => {
                 console.log(
                   'Message sent successfully - topic: ',
                   KafkaTopics.END_TRANSACTIONS_CREDIT_CARD,
                   'transaction id: ',
                   transactionMessage.id,
                 );
-                throw new Error();
               },
               error: (endError) => {
                 console.error(
@@ -160,6 +159,20 @@ export class FinancialFraudService {
   // ----------------------------------------------------
 
   private sendMessage(topic: string, message: any): Observable<void> {
+    // Start - Test case compensation -------------------
+    if (
+      topic === KafkaTopics.FMS_MOVEMENTS &&
+      message.credit_card_number &&
+      (message.credit_card_number === '2222222222' ||
+        message.credit_card_number === '4444444444')
+    ) {
+      console.log('Test Case - Force Fail & Compensation workflow');
+      return new Observable<void>((observer) => {
+        observer.error('Test Case - Force Fail & Compensation workflow');
+      });
+    }
+    // End - Test case compensation -------------------
+
     return new Observable<void>((observer) => {
       this.kafkaProducer
         .send({
@@ -198,38 +211,60 @@ export class FinancialFraudService {
           await session.startTransaction();
 
           if (result === 'OK') {
-            if (movements.length > 0) {
-              try {
+            try {
+              if (movements.length > 0) {
                 const financialDataLog = new this.financialDataLogModel(
                   transaction,
                 );
                 await financialDataLog.save();
-                const message = {
-                  result: TransactionStatus.OK,
-                  transaction: transaction,
-                  error: '',
-                };
-                console.log('--------------------------------------------');
-                console.log(
-                  ' handleMovementsReplay - response to topic: ',
-                  KafkaTopics.END_TRANSACTIONS_CREDIT_CARD,
-                  ' message: ',
-                  message,
-                );
-                await firstValueFrom(
-                  this.sendMessage(
-                    KafkaTopics.END_TRANSACTIONS_CREDIT_CARD,
-                    message,
-                  ),
-                );
-
-                await session.commitTransaction();
-                observer.complete();
-              } catch (error) {
-                const messageError = `Fail in handleMovementsReplay- transaction id: ${transaction.id}  error :${error}`;
-                console.log(messageError);
-                throw new Error(error);
               }
+              // Start - Test case compensation -------------------
+              if (
+                transaction.credit_card_number &&
+                transaction.credit_card_number === '3333333333'
+              ) {
+                console.log(
+                  'Test Case - Force Fail & Compensation  - workflow - transaction id:',
+                  transaction.id,
+                );
+                throw new Error(
+                  'Test Case - Force Fail & Compensation  - workflow',
+                );
+              }
+              // End - Test case compensation -------------------
+
+              const message = {
+                result: TransactionStatus.OK,
+                transaction: transaction,
+                error: '',
+              };
+              console.log('--------------------------------------------');
+              console.log(
+                ' handleMovementsReplay - response to topic: ',
+                KafkaTopics.END_TRANSACTIONS_CREDIT_CARD,
+                ' message: ',
+                message,
+              );
+              await lastValueFrom(
+                this.sendMessage(
+                  KafkaTopics.END_TRANSACTIONS_CREDIT_CARD,
+                  message,
+                ).pipe(defaultIfEmpty(null)),
+              ).catch((error) => {
+                if (error instanceof EmptyError) {
+                  console.error('The event stream is empty.');
+                } else {
+                  console.error('Error processing transaction:', error);
+                }
+                throw error;
+              });
+
+              await session.commitTransaction();
+              observer.complete();
+            } catch (error) {
+              const messageError = `Fail in handleMovementsReplay- transaction id: ${transaction.id}  error :${error}`;
+              console.log(messageError);
+              throw new Error(error);
             }
           } else {
             const messageError = `Internal Error in handleMovementsReplay- transaction id: ${transaction.id} 'result :${result}`;
@@ -245,9 +280,18 @@ export class FinancialFraudService {
             error,
           );
           try {
-            await firstValueFrom(
-              this.sendMessage(KafkaTopics.FMS_COMPENSATION, transaction),
-            );
+            await lastValueFrom(
+              this.sendMessage(KafkaTopics.FMS_COMPENSATION, transaction).pipe(
+                defaultIfEmpty(null),
+              ),
+            ).catch((error) => {
+              if (error instanceof EmptyError) {
+                console.error('The event stream is empty.');
+              } else {
+                console.error('Error processing transaction:', error);
+              }
+              throw error;
+            });
           } catch {
             console.log(
               'Failure to send message in fraud service to: ',
@@ -263,12 +307,19 @@ export class FinancialFraudService {
               error: 'Failure to process transaction in fraud service',
             };
 
-            await firstValueFrom(
+            await lastValueFrom(
               this.sendMessage(
                 KafkaTopics.END_TRANSACTIONS_CREDIT_CARD,
                 errorObj,
-              ),
-            );
+              ).pipe(defaultIfEmpty(null)),
+            ).catch((error) => {
+              if (error instanceof EmptyError) {
+                console.error('The event stream is empty.');
+              } else {
+                console.error('Error processing transaction:', error);
+              }
+              throw error;
+            });
           } catch {
             console.log(
               'Failure to send message in fraud service to topic: ',
@@ -282,8 +333,6 @@ export class FinancialFraudService {
             }
             await session.endSession();
           }
-
-          throw new Error(error);
         });
     }).pipe(
       catchError((error) => {
