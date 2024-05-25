@@ -10,7 +10,7 @@ El presente módulo se responsabiliza en ser el ultimo eslabon de la cadena de m
 Es totalmente gratuito y compartido como un aporte a la comunidad. 
 Se focalizará en el procesamiento distribuido, mediante la aplicación del enfoque de microservicios con el soporte del pattern Saga Coreografico
 .  
-Se apoya en videos que seran publicados en el canal de youtube:  [En construccion]
+Se apoya en videos que seran publicados en el canal de youtube:  [Developer Web MS]([https://www.youtube.com/@developerwebms/playlists])
 
 ___
 
@@ -20,7 +20,7 @@ This module is responsible for being the last link in the chain of microservices
 It is completely free and shared as a contribution to the community.
 It will focus on distributed processing, through the application of the microservices approach with the support of the Saga Coreografico pattern
 .
-It is supported by videos that will be published on the YouTube channel: [Under construction]
+It is supported by videos that will be published on the YouTube channel: [Developer Web MS]([https://www.youtube.com/@developerwebms/playlists])
 ___
 
 ## Tecnologías / Technologies
